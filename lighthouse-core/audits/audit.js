@@ -217,6 +217,38 @@ class Audit {
   }
 
   /**
+   * @param {LH.Artifacts.NodeDetails} node
+   * @return {LH.Audit.Details.NodeValue}
+   */
+  static makeNodeItem(node) {
+    return {
+      type: 'node',
+      lhId: node.lhId,
+      path: node.devtoolsNodePath,
+      selector: node.selector,
+      boundingRect: node.boundingRect,
+      snippet: node.snippet,
+      nodeLabel: node.nodeLabel,
+    };
+  }
+
+  /**
+   * @param {LH.Artifacts.ConsoleMessage} entry
+   * @return {LH.Audit.Details.SourceLocationValue | undefined}
+   */
+  static makeSourceLocationFromConsoleMessage(entry) {
+    if (!entry.url) return;
+
+    return {
+      type: 'source-location',
+      url: entry.url,
+      urlProvider: 'network',
+      line: entry.lineNumber || 0,
+      column: entry.columnNumber || 0,
+    };
+  }
+
+  /**
    * @param {number|null} score
    * @param {LH.Audit.ScoreDisplayMode} scoreDisplayMode
    * @param {string} auditId
@@ -242,8 +274,8 @@ class Audit {
 
   /**
    * @param {typeof Audit} audit
-   * @param {string} errorMessage
-   * @return {LH.Audit.Result}
+   * @param {string | LH.IcuMessage} errorMessage
+   * @return {LH.RawIcu<LH.Audit.Result>}
    */
   static generateErrorAuditResult(audit, errorMessage) {
     return Audit.generateAuditResult(audit, {
@@ -255,7 +287,7 @@ class Audit {
   /**
    * @param {typeof Audit} audit
    * @param {LH.Audit.Product} product
-   * @return {LH.Audit.Result}
+   * @return {LH.RawIcu<LH.Audit.Result>}
    */
   static generateAuditResult(audit, product) {
     if (product.score === undefined) {

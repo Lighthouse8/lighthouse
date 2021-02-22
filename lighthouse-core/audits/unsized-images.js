@@ -20,12 +20,12 @@ const UIStrings = {
   /** Title of a Lighthouse audit that provides detail on whether all images have explicit width and height. This descriptive title is shown to users when one or more images does not have explicit width and height */
   failureTitle: 'Image elements do not have explicit `width` and `height`',
   /** Description of a Lighthouse audit that tells the user why they should include explicit width and height for all images. This is displayed after a user expands the section to see more. No character length limits. 'Learn More' becomes link text to additional documentation. */
-  description: 'Always include explicit width and height on image elements to reduce layout shifts and improve CLS. [Learn more](https://web.dev/optimize-cls/#images-without-dimensions)',
+  description: 'Set an explicit width and height on image elements to reduce layout shifts and improve CLS. [Learn more](https://web.dev/optimize-cls/#images-without-dimensions)',
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
 
-class SizedImages extends Audit {
+class UnsizedImages extends Audit {
   /**
    * @return {LH.Audit.Meta}
    */
@@ -40,24 +40,31 @@ class SizedImages extends Audit {
   }
 
   /**
-   * An img size attribute is valid for preventing CLS
-   * if it is a non-negative, non-zero integer.
-   * @param {string} attr
+   * An img size attribute prevents layout shifts if it is a non-negative integer (incl zero!).
+   * @url https://html.spec.whatwg.org/multipage/embedded-content-other.html#dimension-attributes
+   * @param {string} attrValue
    * @return {boolean}
    */
-  static isValidAttr(attr) {
-    const NON_NEGATIVE_INT_REGEX = /^\d+$/;
-    const ZERO_REGEX = /^0+$/;
-    return NON_NEGATIVE_INT_REGEX.test(attr) && !ZERO_REGEX.test(attr);
+  static doesHtmlAttrProvideExplicitSize(attrValue) {
+    // First, superweird edge case of using the positive-sign. The spec _sorta_ says it's valid...
+    // https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#rules-for-parsing-integers
+    //   > Otherwise, if the character is … (+): Advance position to the next character.
+    //   > (The "+" is ignored, but it is not conforming.)
+    // lol.  Irrelevant though b/c Chrome (at least) doesn't ignore. It rejects this as a non-conforming value.
+    if (attrValue.startsWith('+')) return false;
+
+    // parseInt isn't exactly the same as the html's spec for parsing integers, but it's close enough
+    // https://tc39.es/ecma262/#sec-parseint-string-radix
+    const int = parseInt(attrValue, 10);
+    return int >= 0;
   }
 
   /**
-   * An img css size property is valid for preventing CLS
-   * if it is defined, not empty, and not equal to 'auto'.
-   * @param {string | undefined} property
+   * An img css size property prevents layout shifts if it is defined, not empty, and not equal to 'auto'.
+   * @param {string | null} property
    * @return {boolean}
    */
-  static isValidCss(property) {
+  static doesCssPropProvideExplicitSize(property) {
     if (!property) return false;
     return property !== 'auto';
   }
@@ -67,18 +74,25 @@ class SizedImages extends Audit {
    * @param {LH.Artifacts.ImageElement} image
    * @return {boolean}
    */
-  static isUnsizedImage(image) {
+  static isSizedImage(image) {
+    // Perhaps we hit reachedGatheringBudget before collecting this image's cssWidth/Height
+    // in fetchSourceRules. In this case, we don't have enough information to determine if it's sized.
+    // We don't want to show the user a false positive, so we'll call it sized to give it as pass.
+    // While this situation should only befall small-impact images, it means our analysis is incomplete. :(
+    // Handwavey TODO: explore ways to avoid this.
+    if (image._privateCssSizing === undefined) return true;
+
     const attrWidth = image.attributeWidth;
     const attrHeight = image.attributeHeight;
-    const cssWidth = image.cssWidth;
-    const cssHeight = image.cssHeight;
-    const widthIsValidAttribute = SizedImages.isValidAttr(attrWidth);
-    const widthIsValidCss = SizedImages.isValidCss(cssWidth);
-    const heightIsValidAttribute = SizedImages.isValidAttr(attrHeight);
-    const heightIsValidCss = SizedImages.isValidCss(cssHeight);
-    const validWidth = widthIsValidAttribute || widthIsValidCss;
-    const validHeight = heightIsValidAttribute || heightIsValidCss;
-    return !validWidth || !validHeight;
+    const cssWidth = image._privateCssSizing.width;
+    const cssHeight = image._privateCssSizing.height;
+    const htmlWidthIsExplicit = UnsizedImages.doesHtmlAttrProvideExplicitSize(attrWidth);
+    const cssWidthIsExplicit = UnsizedImages.doesCssPropProvideExplicitSize(cssWidth);
+    const htmlHeightIsExplicit = UnsizedImages.doesHtmlAttrProvideExplicitSize(attrHeight);
+    const cssHeightIsExplicit = UnsizedImages.doesCssPropProvideExplicitSize(cssHeight);
+    const explicitWidth = htmlWidthIsExplicit || cssWidthIsExplicit;
+    const explicitHeight = htmlHeightIsExplicit || cssHeightIsExplicit;
+    return explicitWidth && explicitHeight;
   }
 
   /**
@@ -86,22 +100,27 @@ class SizedImages extends Audit {
    * @return {Promise<LH.Audit.Product>}
    */
   static async audit(artifacts) {
-    // CSS background-images are ignored for this audit.
-    const images = artifacts.ImageElements.filter(el => !el.isCss);
+    // CSS background-images & ShadowRoot images are ignored for this audit.
+    const images = artifacts.ImageElements.filter(el => !el.isCss && !el.isInShadowDOM);
     const unsizedImages = [];
 
     for (const image of images) {
-      if (!SizedImages.isUnsizedImage(image)) continue;
-      const url = URL.elideDataURI(image.src);
+      // Fixed images are out of document flow and won't cause layout shifts
+      const isFixedImage =
+        image.cssComputedPosition === 'fixed' || image.cssComputedPosition === 'absolute';
+      if (isFixedImage) continue;
+
+      // The image was sized with HTML or CSS. Good job.
+      if (UnsizedImages.isSizedImage(image)) continue;
+
+      // Images with a 0-size bounding rect (due to hidden parent) aren't part of layout. Cool.
+      const boundingRect = image.node.boundingRect;
+      const isNotDisplayed = boundingRect.width === 0 && boundingRect.height === 0;
+      if (isNotDisplayed) continue;
+
       unsizedImages.push({
-        url,
-        node: /** @type {LH.Audit.Details.NodeValue} */ ({
-          type: 'node',
-          path: image.devtoolsNodePath,
-          selector: image.selector,
-          nodeLabel: image.nodeLabel,
-          snippet: image.snippet,
-        }),
+        url: URL.elideDataURI(image.src),
+        node: Audit.makeNodeItem(image.node),
       });
     }
 
@@ -120,5 +139,5 @@ class SizedImages extends Audit {
   }
 }
 
-module.exports = SizedImages;
+module.exports = UnsizedImages;
 module.exports.UIStrings = UIStrings;

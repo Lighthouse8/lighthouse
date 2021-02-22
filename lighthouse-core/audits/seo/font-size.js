@@ -28,6 +28,12 @@ const UIStrings = {
   additionalIllegibleText: 'Add\'l illegible text',
   /** Label for the table row which displays the percentage of nodes that have proper font size. */
   legibleText: 'Legible text',
+  /** Label for a column in a data table; entries will be css style rule selectors. */
+  columnSelector: 'Selector',
+  /** Label for a column in a data table; entries will be the percent of page text a specific CSS rule applies to. */
+  columnPercentPageText: '% of Page Text',
+  /** Label for a column in a data table; entries will be text font sizes. */
+  columnFontSize: 'Font Size',
 };
 
 const str_ = i18n.createMessageInstanceIdFn(__filename, UIStrings);
@@ -62,18 +68,21 @@ function getUniqueFailingRules(fontSizeArtifact) {
 }
 
 /**
- * @param {Array<string>=} attributes
+ * @param {Array<string|undefined>=} attributes
  * @returns {Map<string, string>}
  */
 function getAttributeMap(attributes = []) {
   const map = new Map();
 
   for (let i = 0; i < attributes.length; i += 2) {
-    const name = attributes[i].toLowerCase();
-    const value = attributes[i + 1].trim();
+    const name = attributes[i];
+    const value = attributes[i + 1];
+    if (!name || !value) continue;
 
-    if (value) {
-      map.set(name, value);
+    const normalizedValue = value.trim();
+
+    if (normalizedValue) {
+      map.set(name.toLowerCase(), normalizedValue);
     }
   }
 
@@ -227,7 +236,7 @@ class FontSize extends Audit {
       title: str_(UIStrings.title),
       failureTitle: str_(UIStrings.failureTitle),
       description: str_(UIStrings.description),
-      requiredArtifacts: ['FontSize', 'URL', 'MetaElements', 'TestedAsMobileDevice'],
+      requiredArtifacts: ['FontSize', 'URL', 'MetaElements'],
     };
   }
 
@@ -237,7 +246,7 @@ class FontSize extends Audit {
    * @return {Promise<LH.Audit.Product>}
    */
   static async audit(artifacts, context) {
-    if (!artifacts.TestedAsMobileDevice) {
+    if (context.settings.formFactor === 'desktop') {
       // Font size isn't important to desktop SEO
       return {
         score: 1,
@@ -273,10 +282,10 @@ class FontSize extends Audit {
 
     /** @type {LH.Audit.Details.Table['headings']} */
     const headings = [
-      {key: 'source', itemType: 'source-location', text: 'Source'},
-      {key: 'selector', itemType: 'code', text: 'Selector'},
-      {key: 'coverage', itemType: 'text', text: '% of Page Text'},
-      {key: 'fontSize', itemType: 'text', text: 'Font Size'},
+      {key: 'source', itemType: 'source-location', text: str_(i18n.UIStrings.columnSource)},
+      {key: 'selector', itemType: 'code', text: str_(UIStrings.columnSelector)},
+      {key: 'coverage', itemType: 'text', text: str_(UIStrings.columnPercentPageText)},
+      {key: 'fontSize', itemType: 'text', text: str_(UIStrings.columnFontSize)},
     ];
 
     const tableData = failingRules.sort((a, b) => b.textLength - a.textLength)

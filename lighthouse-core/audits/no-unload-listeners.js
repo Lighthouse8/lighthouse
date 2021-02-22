@@ -47,15 +47,17 @@ class NoUnloadListeners extends Audit {
 
     /** @type {LH.Audit.Details.Table['headings']} */
     const headings = [
-      {key: 'source', itemType: 'source-location', text: str_(i18n.UIStrings.columnURL)},
+      {key: 'source', itemType: 'source-location', text: str_(i18n.UIStrings.columnSource)},
     ];
 
     // Look up scriptId to script URL via the JsUsage artifact.
-    /** @type {Array<[string, string]>} */
-    const scriptIdToUrlEntries = Object.values(artifacts.JsUsage)
-      .reduce((acc, usage) => acc.concat(usage), []) // single-level arr.flat().
-      .map(usage => [usage.scriptId, usage.url]);
-    const scriptIdToUrl = new Map(scriptIdToUrlEntries);
+    /** @type {Map<string, string>} */
+    const scriptIdToUrl = new Map();
+    for (const [url, usages] of Object.entries(artifacts.JsUsage)) {
+      for (const usage of usages) {
+        scriptIdToUrl.set(usage.scriptId, url);
+      }
+    }
 
     /** @type {Array<{source: LH.Audit.Details.ItemValue}>} */
     const tableItems = unloadListeners.map(listener => {

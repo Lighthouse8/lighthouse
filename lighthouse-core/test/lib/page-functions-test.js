@@ -13,22 +13,77 @@ const pageFunctions = require('../../lib/page-functions.js');
 /* eslint-env jest */
 
 describe('Page Functions', () => {
+  const url = 'http://www.example.com';
   let dom;
 
   beforeAll(() => {
-    const {document, ShadowRoot} = new jsdom.JSDOM().window;
+    const {document, ShadowRoot, Node, HTMLElement} = new jsdom.JSDOM('', {url}).window;
     global.ShadowRoot = ShadowRoot;
+    global.Node = Node;
+    global.HTMLElement = HTMLElement;
     dom = new DOM(document);
   });
 
   afterAll(() => {
     global.ShadowRoot = undefined;
+    global.Node = undefined;
+  });
+
+  describe('wrapRuntimeEvalErrorInBrowser()', () => {
+    it('returns an error summary object of a regular Error', () => {
+      const testMsg = 'custom test error';
+      const err = new TypeError(testMsg); // TypeError to ensure `name` is copied over.
+
+      const wrapped = pageFunctions.wrapRuntimeEvalErrorInBrowser(err);
+      expect(wrapped).toEqual({
+        __failedInBrowser: true,
+        name: 'TypeError',
+        message: testMsg,
+        stack: expect.stringMatching(/^TypeError:.*page-functions-test\.js:\d+:\d+/s),
+      });
+    });
+
+    it('creates an error summary object from a string error message', () => {
+      const errMsg = 'just a string error';
+
+      const wrapped = pageFunctions.wrapRuntimeEvalErrorInBrowser(errMsg);
+      expect(wrapped).toEqual({
+        __failedInBrowser: true,
+        name: 'Error',
+        message: errMsg,
+        // eslint-disable-next-line max-len
+        stack: expect.stringMatching(/^Error:.*wrapRuntimeEvalErrorInBrowser.*page-functions\.js:\d+:\d+/s),
+      });
+    });
+
+    it('creates the best error summary it can when passed nothing', () => {
+      const wrapped = pageFunctions.wrapRuntimeEvalErrorInBrowser();
+      expect(wrapped).toEqual({
+        __failedInBrowser: true,
+        name: 'Error',
+        message: 'unknown error',
+        // eslint-disable-next-line max-len
+        stack: expect.stringMatching(/^Error:.*wrapRuntimeEvalErrorInBrowser.*page-functions\.js:\d+:\d+/s),
+      });
+    });
   });
 
   describe('get outer HTML snippets', () => {
     it('gets full HTML snippet', () => {
       assert.equal(pageFunctions.getOuterHTMLSnippet(
         dom.createElement('div', '', {id: '1', style: 'style'})), '<div id="1" style="style">');
+    });
+
+    it('replaces img.src with img.currentSrc', () => {
+      const el = dom.createElement('img', '', {id: '1', src: 'no'});
+      Object.defineProperty(el, 'currentSrc', {value: 'yes'});
+      assert.equal(pageFunctions.getOuterHTMLSnippet(el), '<img id="1" src="yes">');
+    });
+
+    it('does not replace img.src with img.currentSrc if resolve to same URL', () => {
+      const el = dom.createElement('img', '', {id: '1', src: './a.png'});
+      Object.defineProperty(el, 'currentSrc', {value: `${url}/a.png`});
+      assert.equal(pageFunctions.getOuterHTMLSnippet(el), '<img id="1" src="./a.png">');
     });
 
     it('removes a specific attribute', () => {
@@ -114,6 +169,14 @@ describe('Page Functions', () => {
       assert.equal(pageFunctions.getNodeLabel(el).length, 80);
     });
 
+    it('Truncates long text containing unicode surrogate pairs', () => {
+      const el = dom.createElement('div');
+      // `getNodeLabel` truncates to 80 characters internally.
+      // We want to test a unicode character on the boundary.
+      el.innerText = Array(78).fill('a').join('') + '💡💡💡';
+      assert.equal(pageFunctions.getNodeLabel(el), Array(78).fill('a').join('') + '💡…');
+    });
+
     it('Uses tag name for html tags', () => {
       const el = dom.createElement('html');
       assert.equal(pageFunctions.getNodeLabel(el), 'html');
@@ -124,6 +187,34 @@ describe('Page Functions', () => {
       const childEl = dom.createElement('span');
       el.appendChild(childEl);
       assert.equal(pageFunctions.getNodeLabel(el), 'div');
+    });
+  });
+
+  describe('getNodePath', () => {
+    it('returns basic node path', () => {
+      const el = dom.createElement('div');
+      el.innerHTML = `
+        <section>
+          <span>Sup</span>
+          <img src="#">
+        </section>
+      `;
+      const img = el.querySelector('img');
+      // The img is index 1 of section's children (excluding some whitespace only text nodes).
+      assert.equal(pageFunctions.getNodePath(img), '0,SECTION,1,IMG');
+    });
+
+    it('returns node path through shadow root', () => {
+      const el = dom.createElement('div');
+      const main = el.appendChild(dom.createElement('main'));
+      const shadowRoot = main.attachShadow({mode: 'open'});
+      const sectionEl = dom.createElement('section');
+      const img = dom.createElement('img');
+      img.src = '#';
+      sectionEl.append(img);
+      shadowRoot.append(sectionEl);
+
+      assert.equal(pageFunctions.getNodePath(img), '0,MAIN,a,#document-fragment,0,SECTION,0,IMG');
     });
   });
 });

@@ -5,16 +5,11 @@
  */
 'use strict';
 
-/* global document, window, getComputedStyle, getBoundingClientRect, getElementsInDocument, Node, getNodePath, getNodeSelector, getNodeLabel */
+/* global document, window, getComputedStyle, getElementsInDocument, Node, getNodeDetails, getRectCenterPoint */
 
-const Gatherer = require('../gatherer.js');
+const FRGatherer = require('../../../fraggle-rock/gather/base-gatherer.js');
 const pageFunctions = require('../../../lib/page-functions.js');
-const {
-  rectContains,
-  getRectArea,
-  getRectCenterPoint,
-  getLargestRect,
-} = require('../../../lib/rect-helpers.js');
+const RectHelpers = require('../../../lib/rect-helpers.js');
 
 const TARGET_SELECTORS = [
   'button',
@@ -38,18 +33,19 @@ const tapTargetsSelector = TARGET_SELECTORS.join(',');
 
 /**
  * @param {HTMLElement} element
- * @returns {boolean}
+ * @return {boolean}
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function elementIsVisible(element) {
   return !!(element.offsetWidth || element.offsetHeight || element.getClientRects().length);
 }
+/* c8 ignore stop */
 
 /**
  * @param {Element} element
- * @returns {LH.Artifacts.Rect[]}
+ * @return {LH.Artifacts.Rect[]}
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function getClientRects(element) {
   const clientRects = Array.from(
     element.getClientRects()
@@ -66,26 +62,29 @@ function getClientRects(element) {
 
   return clientRects;
 }
+/* c8 ignore stop */
 
 /**
  * @param {Element} element
- * @returns {boolean}
+ * @param {string} tapTargetsSelector
+ * @return {boolean}
  */
-/* istanbul ignore next */
-function elementHasAncestorTapTarget(element) {
+/* c8 ignore start */
+function elementHasAncestorTapTarget(element, tapTargetsSelector) {
   if (!element.parentElement) {
     return false;
   }
   if (element.parentElement.matches(tapTargetsSelector)) {
     return true;
   }
-  return elementHasAncestorTapTarget(element.parentElement);
+  return elementHasAncestorTapTarget(element.parentElement, tapTargetsSelector);
 }
+/* c8 ignore stop */
 
 /**
  * @param {Element} element
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function hasTextNodeSiblingsFormingTextBlock(element) {
   if (!element.parentElement) {
     return false;
@@ -117,15 +116,16 @@ function hasTextNodeSiblingsFormingTextBlock(element) {
 
   return false;
 }
+/* c8 ignore stop */
 
 /**
  * Check if element is in a block of text, such as paragraph with a bunch of links in it.
  * Makes a reasonable guess, but for example gets it wrong if the element is surrounded by other
  * HTML elements instead of direct text nodes.
  * @param {Element} element
- * @returns {boolean}
+ * @return {boolean}
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function elementIsInTextBlock(element) {
   const {display} = getComputedStyle(element);
   if (display !== 'inline' && display !== 'inline-block') {
@@ -140,25 +140,13 @@ function elementIsInTextBlock(element) {
     return false;
   }
 }
-
-/**
- * @param {string} str
- * @param {number} maxLength
- * @return {string}
- */
-/* istanbul ignore next */
-function truncate(str, maxLength) {
-  if (str.length <= maxLength) {
-    return str;
-  }
-  return str.slice(0, maxLength - 1) + '…';
-}
+/* c8 ignore stop */
 
 /**
  * @param {Element} el
  * @param {{x: number, y: number}} elCenterPoint
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function elementCenterIsAtZAxisTop(el, elCenterPoint) {
   const viewportHeight = window.innerHeight;
   const targetScrollY = Math.floor(elCenterPoint.y / viewportHeight) * viewportHeight;
@@ -173,13 +161,14 @@ function elementCenterIsAtZAxisTop(el, elCenterPoint) {
 
   return topEl === el || el.contains(topEl);
 }
+/* c8 ignore stop */
 
 /**
  * Finds all position sticky/absolute elements on the page and adds a class
  * that disables pointer events on them.
- * @returns {() => void} - undo function to re-enable pointer events
+ * @return {() => void} - undo function to re-enable pointer events
  */
-/* istanbul ignore next */
+/* c8 ignore start */
 function disableFixedAndStickyElementPointerEvents() {
   const className = 'lighthouse-disable-pointer-events';
   const styleTag = document.createElement('style');
@@ -200,12 +189,14 @@ function disableFixedAndStickyElementPointerEvents() {
     styleTag.remove();
   };
 }
+/* c8 ignore stop */
 
 /**
- * @returns {LH.Artifacts.TapTarget[]}
+ * @param {string} tapTargetsSelector
+ * @return {LH.Artifacts.TapTarget[]}
  */
-/* istanbul ignore next */
-function gatherTapTargets() {
+/* c8 ignore start */
+function gatherTapTargets(tapTargetsSelector) {
   /** @type {LH.Artifacts.TapTarget[]} */
   const targets = [];
 
@@ -223,7 +214,7 @@ function gatherTapTargets() {
   const tapTargetsWithClientRects = [];
   tapTargetElements.forEach(tapTargetElement => {
     // Filter out tap targets that are likely to cause false failures:
-    if (elementHasAncestorTapTarget(tapTargetElement)) {
+    if (elementHasAncestorTapTarget(tapTargetElement, tapTargetsSelector)) {
       // This is usually intentional, either the tap targets trigger the same action
       // or there's a child with a related action (like a delete button for an item)
       return;
@@ -268,6 +259,7 @@ function gatherTapTargets() {
     visibleClientRects = visibleClientRects.filter(rect => {
       // Just checking the center can cause false failures for large partially hidden tap targets,
       // but that should be a rare edge case
+      // @ts-expect-error - put into scope via stringification
       const rectCenterPoint = getRectCenterPoint(rect);
       return elementCenterIsAtZAxisTop(tapTargetElement, rectCenterPoint);
     });
@@ -283,16 +275,9 @@ function gatherTapTargets() {
   for (const {tapTargetElement, visibleClientRects} of tapTargetsWithVisibleClientRects) {
     targets.push({
       clientRects: visibleClientRects,
-      // @ts-expect-error - getBoundingClientRect put into scope via stringification
-      boundingRect: getBoundingClientRect(tapTargetElement),
-      snippet: truncate(tapTargetElement.outerHTML, 300),
-      // @ts-expect-error - getNodePath put into scope via stringification
-      path: getNodePath(tapTargetElement),
-      // @ts-expect-error - getNodeSelector put into scope via stringification
-      selector: getNodeSelector(tapTargetElement),
-      // @ts-expect-error - getNodeLabel put into scope via stringification
-      nodeLabel: getNodeLabel(tapTargetElement),
       href: /** @type {HTMLAnchorElement} */(tapTargetElement)['href'] || '',
+      // @ts-expect-error - getNodeDetails put into scope via stringification
+      node: getNodeDetails(tapTargetElement),
     });
   }
 
@@ -300,38 +285,33 @@ function gatherTapTargets() {
 
   return targets;
 }
+/* c8 ignore stop */
 
-class TapTargets extends Gatherer {
+class TapTargets extends FRGatherer {
   /**
-   * @param {LH.Gatherer.PassContext} passContext
+   * @param {LH.Gatherer.FRTransitionalContext} passContext
    * @return {Promise<LH.Artifacts.TapTarget[]>} All visible tap targets with their positions and sizes
    */
-  afterPass(passContext) {
-    const expression = `(function() {
-      const tapTargetsSelector = "${tapTargetsSelector}";
-      ${pageFunctions.getElementsInDocumentString};
-      ${disableFixedAndStickyElementPointerEvents.toString()};
-      ${elementIsVisible.toString()};
-      ${elementHasAncestorTapTarget.toString()};
-      ${elementCenterIsAtZAxisTop.toString()}
-      ${truncate.toString()};
-      ${getClientRects.toString()};
-      ${hasTextNodeSiblingsFormingTextBlock.toString()};
-      ${elementIsInTextBlock.toString()};
-      ${pageFunctions.getBoundingClientRectString};
-      ${getRectArea.toString()};
-      ${getLargestRect.toString()};
-      ${getRectCenterPoint.toString()};
-      ${rectContains.toString()};
-      ${pageFunctions.getNodePathString};
-      ${pageFunctions.getNodeSelectorString};
-      ${pageFunctions.getNodeLabelString};
-      ${gatherTapTargets.toString()};
-
-      return gatherTapTargets();
-    })()`;
-
-    return passContext.driver.evaluateAsync(expression, {useIsolation: true});
+  snapshot(passContext) {
+    return passContext.driver.executionContext.evaluate(gatherTapTargets, {
+      args: [tapTargetsSelector],
+      useIsolation: true,
+      deps: [
+        pageFunctions.getNodeDetailsString,
+        pageFunctions.getElementsInDocument,
+        disableFixedAndStickyElementPointerEvents,
+        elementIsVisible,
+        elementHasAncestorTapTarget,
+        elementCenterIsAtZAxisTop,
+        getClientRects,
+        hasTextNodeSiblingsFormingTextBlock,
+        elementIsInTextBlock,
+        RectHelpers.getRectCenterPoint,
+        pageFunctions.getNodePath,
+        pageFunctions.getNodeSelector,
+        pageFunctions.getNodeLabel,
+      ],
+    });
   }
 }
 

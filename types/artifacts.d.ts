@@ -27,9 +27,7 @@ declare global {
       /** The ISO-8601 timestamp of when the test page was fetched and artifacts collected. */
       fetchTime: string;
       /** A set of warnings about unexpected things encountered while loading and testing the page. */
-      LighthouseRunWarnings: string[];
-      /** Whether the page was loaded on either a real or emulated mobile device. */
-      TestedAsMobileDevice: boolean;
+      LighthouseRunWarnings: Array<string | IcuMessage>;
       /** Device which Chrome is running on. */
       HostFormFactor: 'desktop'|'mobile';
       /** The user agent string of the version of Chrome used. */
@@ -64,8 +62,8 @@ declare global {
      * on a major version bump.
      */
     export interface PublicGathererArtifacts {
-      /** Console deprecation and intervention warnings logged by Chrome during page load. */
-      ConsoleMessages: Crdp.Log.EntryAddedEvent[];
+      /** ConsoleMessages deprecation and intervention warnings, console API calls, and exceptions logged by Chrome during page load. */
+      ConsoleMessages: Artifacts.ConsoleMessage[];
       /** All the iframe elements in the page.*/
       IFrameElements: Artifacts.IFrameElement[];
       /** The contents of the main HTML document network resource. */
@@ -76,14 +74,10 @@ declare global {
       LinkElements: Artifacts.LinkElement[];
       /** The values of the <meta> elements in the head. */
       MetaElements: Array<{name?: string, content?: string, property?: string, httpEquiv?: string, charset?: string}>;
-      /** Set of exceptions thrown during page load. */
-      RuntimeExceptions: Crdp.Runtime.ExceptionThrownEvent[];
       /** Information on all script elements in the page. Also contains the content of all requested scripts and the networkRecord requestId that contained their content. Note, HTML documents will have one entry per script tag, all with the same requestId. */
       ScriptElements: Array<Artifacts.ScriptElement>;
       /** The dimensions and devicePixelRatio of the loaded viewport. */
       ViewportDimensions: Artifacts.ViewportDimensions;
-      /** All the form elements in the page and formless inputs. */
-      FormElements: Artifacts.Form[];
     }
 
     /**
@@ -112,28 +106,26 @@ declare global {
       Fonts: Artifacts.Font[];
       /** Information on poorly sized font usage and the text affected by it. */
       FontSize: Artifacts.FontSize;
+      /** All the form elements in the page and formless inputs. */
+      FormElements: Artifacts.Form[];
       /** Screenshot of the entire page (rather than just the above the fold content). */
       FullPageScreenshot: Artifacts.FullPageScreenshot | null;
       /** Information about event listeners registered on the global object. */
       GlobalListeners: Array<Artifacts.GlobalListener>;
-      /** The page's document body innerText if loaded with JavaScript disabled. */
-      HTMLWithoutJavaScript: {bodyText: string, hasNoScript: boolean};
       /** Whether the page ended up on an HTTPS page after attempting to load the HTTP version. */
       HTTPRedirect: {value: boolean};
       /** The issues surfaced in the devtools Issues panel */
       InspectorIssues: Artifacts.InspectorIssues;
-      /** JS coverage information for code used during page load. Keyed by URL. */
-      JsUsage: Record<string, Crdp.Profiler.ScriptCoverage[]>;
+      /** JS coverage information for code used during page load. Keyed by network URL. */
+      JsUsage: Record<string, Array<Omit<Crdp.Profiler.ScriptCoverage, 'url'>>>;
       /** Parsed version of the page's Web App Manifest, or null if none found. */
       Manifest: Artifacts.Manifest | null;
       /** The URL loaded with interception */
       MixedContent: {url: string};
-      /** The status code of the attempted load of the page while network access is disabled. */
-      Offline: number;
       /** Size and compression opportunity information for all the images in the page. */
       OptimizedImages: Array<Artifacts.OptimizedImage | Artifacts.OptimizedImageError>;
-      /** HTML snippets from any password inputs that prevent pasting. */
-      PasswordInputsWithPreventedPaste: {snippet: string}[];
+      /** HTML snippets and node paths from any password inputs that prevent pasting. */
+      PasswordInputsWithPreventedPaste: Artifacts.PasswordInputsWithPreventedPaste[];
       /** Size info of all network records sent without compression and their size after gzipping. */
       ResponseCompression: {requestId: string, url: string, mimeType: string, transferSize: number, resourceSize: number, gzipSize?: number}[];
       /** Information on fetching and the content of the /robots.txt file. */
@@ -142,8 +134,6 @@ declare global {
       ServiceWorker: {versions: Crdp.ServiceWorker.ServiceWorkerVersion[], registrations: Crdp.ServiceWorker.ServiceWorkerRegistration[]};
       /** Source maps of scripts executed in the page. */
       SourceMaps: Array<Artifacts.SourceMap>;
-      /** The status of an offline fetch of the page's start_url. -1 and a explanation if missing or there was an error. */
-      StartUrl: {url?: string, statusCode: number, explanation?: string};
       /** Information on <script> and <link> tags blocking first paint. */
       TagsBlockingFirstPaint: Artifacts.TagBlockingFirstPaint[];
       /** Information about tap targets including their position and size. */
@@ -157,33 +147,36 @@ declare global {
       export type TaskNode = _TaskNode;
       export type MetaElement = LH.Artifacts['MetaElements'][0];
 
+      export interface NodeDetails {
+        lhId: string,
+        devtoolsNodePath: string,
+        selector: string,
+        boundingRect: Rect,
+        snippet: string,
+        nodeLabel: string,
+      }
+
       export interface RuleExecutionError {
         name: string;
         message: string;
       }
 
-      export interface AxeResult {
+      export interface AxeRuleResult {
         id: string;
-        impact: string;
+        impact?: string;
         tags: Array<string>;
         nodes: Array<{
-          path: string;
-          html: string;
-          boundingRect?: Rect;
-          snippet: string;
           target: Array<string>;
           failureSummary?: string;
-          nodeLabel?: string;
+          node: NodeDetails;
         }>;
-        // When rules error they set these properties
-        // https://github.com/dequelabs/axe-core/blob/eeff122c2de11dd690fbad0e50ba2fdb244b50e8/lib/core/base/audit.js#L684-L693
         error?: RuleExecutionError;
       }
 
       export interface Accessibility {
-        violations: Array<AxeResult>;
-        notApplicable: Array<Pick<AxeResult, 'id'>>;
-        incomplete: Array<AxeResult>;
+        violations: Array<AxeRuleResult>;
+        notApplicable: Array<Pick<AxeRuleResult, 'id'>>;
+        incomplete: Array<AxeRuleResult>;
         version: string;
       }
 
@@ -201,8 +194,8 @@ declare global {
       export interface DOMStats {
         /** The total number of elements found within the page's body. */
         totalBodyElements: number;
-        width: {max: number, pathToElement: Array<string>, snippet: string};
-        depth: {max: number, pathToElement: Array<string>, snippet: string};
+        width: NodeDetails & {max: number;};
+        depth: NodeDetails & {max: number;};
       }
 
       export interface EmbeddedContentInfo {
@@ -211,12 +204,15 @@ declare global {
         src: string | null;
         data: string | null;
         code: string | null;
-        params: {name: string; value: string}[];
+        params: Array<{name: string; value: string}>;
+        node: LH.Artifacts.NodeDetails;
       }
 
       export interface IFrameElement {
         /** The `id` attribute of the iframe. */
         id: string,
+        /** Details for node in DOM for the iframe element */
+        node: NodeDetails,
         /** The `src` attribute of the iframe. */
         src: string,
         /** The iframe's ClientRect. @see https://developer.mozilla.org/en-US/docs/Web/API/Element/getBoundingClientRect */
@@ -248,13 +244,10 @@ declare global {
         crossOrigin: string | null
         /** Where the link was found, either in the DOM or in the headers of the main document */
         source: 'head'|'body'|'headers'
-        /** Path that uniquely identifies the node in the DOM. This is not defined when `source` is 'headers' */
-        devtoolsNodePath?: string
-        /** Selector for the DOM node. This is not defined when `source` is 'headers' */
-        selector?: string
-        /** Human readable label for the element. This is not defined when `source` is 'headers' */
-        nodeLabel?: string
+        node: NodeDetails | null
       }
+
+      export interface PasswordInputsWithPreventedPaste {node: NodeDetails}
 
       export interface ScriptElement {
         type: string | null
@@ -263,8 +256,8 @@ declare global {
         id: string | null
         async: boolean
         defer: boolean
-        /** Path that uniquely identifies the node in the DOM */
-        devtoolsNodePath: string;
+        /** Details for node in DOM for the script element */
+        node: NodeDetails | null
         /** Where the script was discovered, either in the head, the body, or network records. */
         source: 'head'|'body'|'network'
         /** The content of the inline script or the network record with the matching URL, null if the script had a src and no network record could be found. */
@@ -328,7 +321,7 @@ declare global {
           files: Record<string, number>;
           unmappedBytes: number;
           totalBytes: number;
-        };
+        } | {errorMessage: string};
       }
 
       /** @see https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a#Attributes */
@@ -342,10 +335,7 @@ declare global {
         text: string
         role: string
         target: string
-        devtoolsNodePath: string
-        selector: string
-        nodeLabel: string
-        outerHTML: string
+        node: NodeDetails
         onclick: string
         listeners?: Array<{
           type: Crdp.DOMDebugger.EventListener['type']
@@ -390,6 +380,7 @@ declare global {
             parentRule?: {origin: Crdp.CSS.StyleSheetOrigin, selectors: {text: string}[]};
             styleSheetId?: string;
             stylesheet?: Crdp.CSS.CSSStyleSheetHeader;
+            cssProperties?: Array<Crdp.CSS.CSSProperty>;
           }
         }>
       }
@@ -410,17 +401,36 @@ declare global {
         /** The displayed height of the image, uses img.height when available falling back to clientHeight. See https://codepen.io/patrickhulce/pen/PXvQbM for examples. */
         displayedHeight: number;
         /** The natural width of the underlying image, uses img.naturalWidth. See https://codepen.io/patrickhulce/pen/PXvQbM for examples. */
-        naturalWidth: number;
-        /** The natural height of the underlying image, uses img.naturalHeight. See https://codepen.io/patrickhulce/pen/PXvQbM for examples. */
-        naturalHeight: number;
+        naturalWidth?: number;
+        /**
+         * The natural height of the underlying image, uses img.naturalHeight. See https://codepen.io/patrickhulce/pen/PXvQbM for examples.
+         * TODO: explore revising the shape of this data. https://github.com/GoogleChrome/lighthouse/issues/12077
+         */
+        naturalHeight?: number;
         /** The raw width attribute of the image element. CSS images will be set to the empty string. */
         attributeWidth: string;
         /** The raw height attribute of the image element. CSS images will be set to the empty string. */
         attributeHeight: string;
-        /** The CSS width property of the image element. */
-        cssWidth?: string | undefined;
-        /** The CSS height property of the image element. */
-        cssHeight?: string | undefined;
+        /**
+         * The CSS width property of the image element.
+         * TODO: explore deprecating this in favor of _privateCssSizing. https://github.com/GoogleChrome/lighthouse/issues/12077
+         */
+        cssWidth?: string;
+        /**
+         * The CSS height property of the image element.
+         * TODO: explore deprecating this in favor of _privateCssSizing
+         */
+        cssHeight?: string;
+        /**
+         * The width/height of the element as defined by matching CSS rules. Set to `undefined` if the data was not collected.
+         * TODO: Finalize naming/shape of this data prior to Lighthouse 8. https://github.com/GoogleChrome/lighthouse/issues/12077
+         */
+        _privateCssSizing?: {
+          /** The width of the image as expressed by CSS rules. Set to `null` if there was no width set in CSS. */
+          width: string | null;
+          /** The height of the image as expressed by CSS rules. Set to `null` if there was no height set in CSS. */
+          height: string | null;
+        }
         /** The BoundingClientRect of the element. */
         clientRect: {
           top: number;
@@ -428,30 +438,22 @@ declare global {
           left: number;
           right: number;
         };
+        /** The CSS position attribute of the element */
+        cssComputedPosition: string;
         /** Flags whether this element was an image via CSS background-image rather than <img> tag. */
         isCss: boolean;
         /** Flags whether this element was contained within a <picture> tag. */
         isPicture: boolean;
-        /** Flags whether this element was sized using a non-default `object-fit` CSS property. */
-        usesObjectFit: boolean;
-        /** Flags whether this element was rendered using a pixel art scaling method.
-         *  See https://developer.mozilla.org/en-US/docs/Games/Techniques/Crisp_pixel_art_look for
-         *  details.
-         */
-        usesPixelArtScaling: boolean;
-        /** Flags whether the image has a srcset with density descriptors.
-         *  See https://html.spec.whatwg.org/multipage/images.html#pixel-density-descriptor
-         */
-        usesSrcSetDensityDescriptor: boolean;
-        /** The size of the underlying image file in bytes. 0 if the file could not be identified. */
-        resourceSize: number;
-        /** Path that uniquely identifies the node in the DOM */
-        devtoolsNodePath: string;
-        snippet: string;
-        selector: string;
-        nodeLabel: string;
+        /** Flags whether this element was contained within a ShadowRoot */
+        isInShadowDOM: boolean;
+        /** `object-fit` CSS property. */
+        cssComputedObjectFit: string;
+        /** `image-rendering` propertry. */
+        cssComputedImageRendering: string;
         /** The MIME type of the underlying image file. */
         mimeType?: string;
+        /** Details for node in DOM for the image element */
+        node: NodeDetails;
         /** The loading attribute of the image. */
         loading?: string;
       }
@@ -483,8 +485,11 @@ declare global {
         endTime: number;
         transferSize: number;
         tag: {
-          tagName: string;
+          tagName: 'LINK'|'SCRIPT';
+          /** The value of `HTMLLinkElement.href` or `HTMLScriptElement.src`. */
           url: string;
+          /** A record of when changes to the `HTMLLinkElement.media` attribute occurred and if the new media type matched the page. */
+          mediaChanges?: Array<{href: string, media: string, msSinceHTMLEnd: number, matches: boolean}>;
         };
       }
 
@@ -498,23 +503,15 @@ declare global {
       }
 
       export interface TapTarget {
-        snippet: string;
-        selector: string;
-        nodeLabel?: string;
-        path: string;
+        node: NodeDetails;
         href: string;
         clientRects: Rect[];
-        boundingRect: Rect;
       }
 
       export interface TraceElement {
         traceEventType: 'largest-contentful-paint'|'layout-shift'|'animation';
-        selector: string;
-        nodeLabel?: string;
-        devtoolsNodePath: string;
-        snippet?: string;
         score?: number;
-        boundingRect: Rect;
+        node: NodeDetails;
         nodeId?: number;
         animations?: {name?: string, failureReasonsMask?: number, unsupportedProperties?: string[]}[];
       }
@@ -529,6 +526,10 @@ declare global {
 
       export interface InspectorIssues {
         mixedContent: Crdp.Audits.MixedContentIssueDetails[];
+        sameSiteCookies: Crdp.Audits.SameSiteCookieIssueDetails[];
+        blockedByResponse: Crdp.Audits.BlockedByResponseIssueDetails[];
+        heavyAds: Crdp.Audits.HeavyAdIssueDetails[];
+        contentSecurityPolicy: Crdp.Audits.ContentSecurityPolicyIssueDetails[];
       }
 
       // Computed artifact types below.
@@ -607,8 +608,10 @@ declare global {
         timeOrigin: number;
         firstPaint?: number;
         firstContentfulPaint: number;
+        firstContentfulPaintAllFrames: number;
         firstMeaningfulPaint?: number;
         largestContentfulPaint?: number;
+        largestContentfulPaintAllFrames?: number;
         traceEnd: number;
         load?: number;
         domContentLoaded?: number;
@@ -623,20 +626,26 @@ declare global {
         processEvents: Array<TraceEvent>;
         /** The subset of trace events from the page's main thread, sorted by timestamp. */
         mainThreadEvents: Array<TraceEvent>;
+        /** The subset of trace events from the main frame and any child frames, sorted by timestamp. */
+        frameTreeEvents: Array<TraceEvent>;
         /** IDs for the trace's main frame, process, and thread. */
         mainFrameIds: {pid: number, tid: number, frameId: string};
         /** The list of frames committed in the trace. */
-        frames: Array<{frame: string, url: string}>;
+        frames: Array<{id: string, url: string}>;
         /** The trace event marking the time at which the page load should consider to have begun. Typically the same as the navigationStart but might differ due to SPA navigations, client-side redirects, etc. */
         timeOriginEvt: TraceEvent;
         /** The trace event marking firstPaint, if it was found. */
         firstPaintEvt?: TraceEvent;
         /** The trace event marking firstContentfulPaint, if it was found. */
         firstContentfulPaintEvt: TraceEvent;
+        /** The trace event marking firstContentfulPaint from all frames, if it was found. */
+        firstContentfulPaintAllFramesEvt: TraceEvent;
         /** The trace event marking firstMeaningfulPaint, if it was found. */
         firstMeaningfulPaintEvt?: TraceEvent;
         /** The trace event marking largestContentfulPaint, if it was found. */
         largestContentfulPaintEvt?: TraceEvent;
+        /** The trace event marking largestContentfulPaint from all frames, if it was found. */
+        largestContentfulPaintAllFramesEvt?: TraceEvent;
         /** The trace event marking loadEventEnd, if it was found. */
         loadEvt?: TraceEvent;
         /** The trace event marking domContentLoadedEventEnd, if it was found. */
@@ -665,19 +674,26 @@ declare global {
       }
 
       export interface FullPageScreenshot {
-        /** Base64 image data URL. */
-        data: string;
-        width: number;
-        height: number;
+        screenshot: {
+          /** Base64 image data URL. */
+          data: string;
+          width: number;
+          height: number;
+        };
+        nodes: Record<string, Rect>;
       }
 
       export interface TimingSummary {
         firstContentfulPaint: number;
         firstContentfulPaintTs: number | undefined;
+        firstContentfulPaintAllFrames: number | undefined;
+        firstContentfulPaintAllFramesTs: number | undefined;
         firstMeaningfulPaint: number;
         firstMeaningfulPaintTs: number | undefined;
         largestContentfulPaint: number | undefined;
         largestContentfulPaintTs: number | undefined;
+        largestContentfulPaintAllFrames: number | undefined;
+        largestContentfulPaintAllFramesTs: number | undefined;
         firstCPUIdle: number | undefined;
         firstCPUIdleTs: number | undefined;
         interactive: number | undefined;
@@ -688,20 +704,26 @@ declare global {
         estimatedInputLatencyTs: number | undefined;
         maxPotentialFID: number | undefined;
         cumulativeLayoutShift: number | undefined;
+        cumulativeLayoutShiftAllFrames: number | undefined;
         totalBlockingTime: number;
         observedTimeOrigin: number;
         observedTimeOriginTs: number;
         observedNavigationStart: number;
         observedNavigationStartTs: number;
         observedCumulativeLayoutShift: number | undefined;
+        observedCumulativeLayoutShiftAllFrames: number | undefined;
         observedFirstPaint: number | undefined;
         observedFirstPaintTs: number | undefined;
         observedFirstContentfulPaint: number;
         observedFirstContentfulPaintTs: number;
+        observedFirstContentfulPaintAllFrames: number;
+        observedFirstContentfulPaintAllFramesTs: number;
         observedFirstMeaningfulPaint: number | undefined;
         observedFirstMeaningfulPaintTs: number | undefined;
         observedLargestContentfulPaint: number | undefined;
         observedLargestContentfulPaintTs: number | undefined;
+        observedLargestContentfulPaintAllFrames: number | undefined;
+        observedLargestContentfulPaintAllFramesTs: number | undefined;
         observedTraceEnd: number | undefined;
         observedTraceEndTs: number | undefined;
         observedLoad: number | undefined;
@@ -714,11 +736,21 @@ declare global {
         observedLastVisualChangeTs: number;
         observedSpeedIndex: number;
         observedSpeedIndexTs: number;
+        layoutShiftAvgSessionGap5s: number,
+        layoutShiftMaxSessionGap1s: number,
+        layoutShiftMaxSessionGap1sLimit5s: number,
+        layoutShiftMaxSliding1s: number,
+        layoutShiftMaxSliding300ms: number,
       }
 
       export interface Form {
         /** If attributes is missing that means this is a formless set of elements. */
-        attributes?: { id: string, name: string, autocomplete: string, nodeLabel: string, snippet: string,};
+        attributes?: {
+          id: string;
+          name: string;
+          autocomplete: string;
+        };
+        node: NodeDetails | null;
         inputs: Array<FormInput>;
         labels: Array<FormLabel>;
       }
@@ -728,16 +760,18 @@ declare global {
         id: string;
         name: string;
         placeholder?: string;
-        autocomplete: string;
-        nodeLabel: string;
-        snippet: string;
+        autocomplete: {
+          property: string;
+          attribute: string | null;
+          prediction: string | null;
+        }
+        node: NodeDetails;
       }
 
       /** Attributes collected for every label element in the labels array from the forms interface */
       export interface FormLabel {
         for: string;
-        nodeLabel: string;
-        snippet: string;
+        node: NodeDetails;
       }
 
       /** Information about an event listener registered on the global object. */
@@ -751,6 +785,57 @@ declare global {
         /** Column number in the script (0-based). */
         columnNumber: number;
       }
+
+      /** Describes a generic console message. */
+      interface BaseConsoleMessage {
+        /**
+         * The text printed to the console, as shown on the browser console.
+         *
+         * For console API calls, all values are formatted into the text. Primitive values and
+         * function will be printed as-is while objects will be formatted as if the object were
+         * passed to String(). For example, a div will be formatted as "[object HTMLDivElement]".
+         *
+         * For exceptions the text will be the same as err.message at runtime.
+         */
+        text: string;
+        /** Time of the console log in milliseconds since epoch. */
+        timestamp: number;
+        /** The stack trace of the log/exception, if known. */
+        stackTrace?: Crdp.Runtime.StackTrace;
+        /** The URL of the log/exception, if known. */
+        url?: string;
+        /** Line number in the script (0-indexed), if known. */
+        lineNumber?: number;
+        /** Column number in the script (0-indexed), if known. */
+        columnNumber?: number;
+      }
+
+      /** Describes a console message logged by a script using the console API. */
+      interface ConsoleAPICall extends BaseConsoleMessage {
+        eventType: 'consoleAPI';
+        /** The console API invoked. Only the following console API calls are gathered. */
+        source: 'console.warn' | 'console.error';
+        /** Corresponds to the API call. */
+        level: 'warning' | 'error';
+      }
+
+      interface ConsoleException extends BaseConsoleMessage {
+        eventType: 'exception';
+        source: 'exception';
+        level: 'error';
+      }
+
+      /**
+       * Describes a report logged to the console by the browser regarding interventions,
+       * deprecations, violations, and more.
+       */
+      interface ConsoleProtocolLog extends BaseConsoleMessage {
+        source: Crdp.Log.LogEntry['source'],
+        level: Crdp.Log.LogEntry['level'],
+        eventType: 'protocolLog';
+      }
+
+      export type ConsoleMessage = ConsoleAPICall | ConsoleException | ConsoleProtocolLog;
     }
   }
 }

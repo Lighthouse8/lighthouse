@@ -214,6 +214,15 @@ describe('minification estimator', () => {
       assert.equal(computeJSTokenLength(js), 9);
     });
 
+    it('should handle regex as switch case clause edge cases', () => {
+      const js = `
+        switch(true){case/^hello!/.test("hello!"):"///123456789"}
+      `;
+
+      assert.equal(computeJSTokenLength(js), 57);
+      assert.equal(computeJSTokenLength(js), js.trim().length);
+    });
+
     it('should handle large, real, unminified javscript files', () => {
       assert.equal(angularJs.length, 1374505);
       const minificationPct = 1 - computeJSTokenLength(angularJs) / angularJs.length;
@@ -226,6 +235,28 @@ describe('minification estimator', () => {
       const minificationPct = 1 - computeJSTokenLength(courseheroJs) / courseheroJs.length;
       // Already-minified source script. estimated 1% smaller minified
       expect(minificationPct).toBeCloseTo(0.01);
+    });
+
+    it('should handle nested template literals', () => {
+      // Basic nested literals
+      const nestedTemplates = 'window.myString=`foo${` bar ${` baz ${` bam `} `} `} `';
+      expect(computeJSTokenLength(nestedTemplates)).toEqual(nestedTemplates.length);
+
+      // Can get rid of 5 spaces after inner code braces
+      const nestedWithCode = 'window.myString=`foo${` bar ${{}     }`}`';
+      expect(computeJSTokenLength(nestedWithCode)).toEqual(nestedWithCode.length - 5);
+
+      // Ignore braces in string
+      const nestedTemplatesBrace = 'window.myString=`{foo${` }bar ${` baz ${` bam `} `} `} `';
+      expect(computeJSTokenLength(nestedTemplatesBrace)).toEqual(nestedTemplatesBrace.length);
+
+      // Handles multiple string braces (Has 4 spaces)
+      const nestedStrings = 'window.myString=`${({foo: bar.map(() => ({baz: `${\'}\'}`}))})}`';
+      expect(computeJSTokenLength(nestedStrings)).toEqual(nestedStrings.length - 4);
+
+      // Handles braces outside template literal (2 spaces + 4 spaces)
+      const outerBraces = '{  foo:{bar:`baz ${bam.get({}    )}`}}';
+      expect(computeJSTokenLength(outerBraces)).toEqual(outerBraces.length - 6);
     });
   });
 });

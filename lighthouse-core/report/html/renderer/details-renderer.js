@@ -20,12 +20,19 @@
 
 /** @typedef {import('./dom.js')} DOM */
 
+// Convenience types for localized AuditDetails.
+/** @typedef {LH.FormattedIcu<LH.Audit.Details>} AuditDetails */
+/** @typedef {LH.FormattedIcu<LH.Audit.Details.Opportunity>} OpportunityTable */
+/** @typedef {LH.FormattedIcu<LH.Audit.Details.Table>} Table */
+/** @typedef {LH.FormattedIcu<LH.Audit.Details.TableItem>} TableItem */
+/** @typedef {LH.FormattedIcu<LH.Audit.Details.ItemValue>} TableItemValue */
+
 const URL_PREFIXES = ['http://', 'https://', 'data:'];
 
 class DetailsRenderer {
   /**
    * @param {DOM} dom
-   * @param {{fullPageScreenshot?: LH.Audit.Details.FullPageScreenshot}} [options]
+   * @param {{fullPageScreenshot?: LH.Artifacts.FullPageScreenshot}} [options]
    */
   constructor(dom, options = {}) {
     this._dom = dom;
@@ -43,7 +50,7 @@ class DetailsRenderer {
   }
 
   /**
-   * @param {LH.Audit.Details} details
+   * @param {AuditDetails} details
    * @return {Element|null}
    */
   render(details) {
@@ -137,7 +144,7 @@ class DetailsRenderer {
 
   /**
    * @param {{text: string, url: string}} details
-   * @return {Element}
+   * @return {HTMLElement}
    */
   _renderLink(details) {
     const allowedProtocols = ['https:', 'http:'];
@@ -217,7 +224,7 @@ class DetailsRenderer {
    * Render a details item value for embedding in a table. Renders the value
    * based on the heading's valueType, unless the value itself has a `type`
    * property to override it.
-   * @param {LH.Audit.Details.ItemValue} value
+   * @param {TableItemValue} value
    * @param {LH.Audit.Details.OpportunityColumnHeading} heading
    * @return {Element|null}
    */
@@ -307,8 +314,8 @@ class DetailsRenderer {
    * Get the headings of a table-like details object, converted into the
    * OpportunityColumnHeading type until we have all details use the same
    * heading format.
-   * @param {LH.Audit.Details.Table|LH.Audit.Details.Opportunity} tableLike
-   * @return {Array<LH.Audit.Details.OpportunityColumnHeading>}
+   * @param {Table|OpportunityTable} tableLike
+   * @return {OpportunityTable['headings']}
    */
   _getCanonicalizedHeadingsFromTable(tableLike) {
     if (tableLike.type === 'opportunity') {
@@ -322,8 +329,8 @@ class DetailsRenderer {
    * Get the headings of a table-like details object, converted into the
    * OpportunityColumnHeading type until we have all details use the same
    * heading format.
-   * @param {LH.Audit.Details.TableColumnHeading} heading
-   * @return {LH.Audit.Details.OpportunityColumnHeading}
+   * @param {Table['headings'][number]} heading
+   * @return {OpportunityTable['headings'][number]}
    */
   _getCanonicalizedHeading(heading) {
     let subItemsHeading;
@@ -381,7 +388,7 @@ class DetailsRenderer {
   }
 
   /**
-   * @param {LH.Audit.Details.OpportunityItem | LH.Audit.Details.TableItem} item
+   * @param {TableItem} item
    * @param {(LH.Audit.Details.OpportunityColumnHeading | null)[]} headings
    */
   _renderTableRow(item, headings) {
@@ -418,7 +425,7 @@ class DetailsRenderer {
   /**
    * Renders one or more rows from a details table item. A single table item can
    * expand into multiple rows, if there is a subItemsHeading.
-   * @param {LH.Audit.Details.OpportunityItem | LH.Audit.Details.TableItem} item
+   * @param {TableItem} item
    * @param {LH.Audit.Details.OpportunityColumnHeading[]} headings
    */
   _renderTableRowsFromItem(item, headings) {
@@ -440,7 +447,7 @@ class DetailsRenderer {
   }
 
   /**
-   * @param {LH.Audit.Details.Table|LH.Audit.Details.Opportunity} details
+   * @param {OpportunityTable|Table} details
    * @return {Element}
    */
   _renderTable(details) {
@@ -514,19 +521,20 @@ class DetailsRenderer {
     if (item.selector) element.setAttribute('data-selector', item.selector);
     if (item.snippet) element.setAttribute('data-snippet', item.snippet);
 
-    if (!item.boundingRect || !this._fullPageScreenshot) {
-      return element;
-    }
+    if (!this._fullPageScreenshot) return element;
+
+    const rect = item.lhId && this._fullPageScreenshot.nodes[item.lhId];
+    if (!rect || rect.width === 0 || rect.height === 0) return element;
 
     const maxThumbnailSize = {width: 147, height: 100};
     const elementScreenshot = ElementScreenshotRenderer.render(
       this._dom,
       this._templateContext,
-      this._fullPageScreenshot,
-      item.boundingRect,
+      this._fullPageScreenshot.screenshot,
+      rect,
       maxThumbnailSize
     );
-    element.prepend(elementScreenshot);
+    if (elementScreenshot) element.prepend(elementScreenshot);
 
     return element;
   }
@@ -542,15 +550,31 @@ class DetailsRenderer {
     }
 
     // Lines are shown as one-indexed.
-    const line = item.line + 1;
-    const column = item.column;
+    const generatedLocation = `${item.url}:${item.line + 1}:${item.column}`;
+    let sourceMappedOriginalLocation;
+    if (item.original) {
+      const file = item.original.file || '<unmapped>';
+      sourceMappedOriginalLocation = `${file}:${item.original.line + 1}:${item.original.column}`;
+    }
 
+    // We render slightly differently based on presence of source map and provenance of URL.
     let element;
-    if (item.urlProvider === 'network') {
+    if (item.urlProvider === 'network' && sourceMappedOriginalLocation) {
+      element = this._renderLink({
+        url: item.url,
+        text: sourceMappedOriginalLocation,
+      });
+      element.title = `maps to generated location ${generatedLocation}`;
+    } else if (item.urlProvider === 'network' && !sourceMappedOriginalLocation) {
       element = this.renderTextURL(item.url);
-      this._dom.find('.lh-link', element).textContent += `:${line}:${column}`;
+      this._dom.find('.lh-link', element).textContent += `:${item.line + 1}:${item.column}`;
+    } else if (item.urlProvider === 'comment' && sourceMappedOriginalLocation) {
+      element = this._renderText(`${sourceMappedOriginalLocation} (from source map)`);
+      element.title = `${generatedLocation} (from sourceURL)`;
+    } else if (item.urlProvider === 'comment' && !sourceMappedOriginalLocation) {
+      element = this._renderText(`${generatedLocation} (from sourceURL)`);
     } else {
-      element = this._renderText(`${item.url}:${line}:${column} (from sourceURL)`);
+      return null;
     }
 
     element.classList.add('lh-source-location');
@@ -558,6 +582,7 @@ class DetailsRenderer {
     // DevTools expects zero-indexed lines.
     element.setAttribute('data-source-line', String(item.line));
     element.setAttribute('data-source-column', String(item.column));
+
     return element;
   }
 
