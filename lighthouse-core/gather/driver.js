@@ -19,6 +19,7 @@ const constants = require('../config/constants.js');
 
 const log = require('lighthouse-logger');
 const DevtoolsLog = require('./devtools-log.js');
+const TraceGatherer = require('./gatherers/trace.js');
 
 const pageFunctions = require('../lib/page-functions.js');
 
@@ -26,6 +27,7 @@ const pageFunctions = require('../lib/page-functions.js');
 // eslint-disable-next-line no-unused-vars
 const Connection = require('./connections/connection.js');
 const NetworkMonitor = require('./driver/network-monitor.js');
+const {getBrowserVersion} = require('./driver/environment.js');
 
 const UIStrings = {
   /**
@@ -64,9 +66,6 @@ const DEFAULT_PROTOCOL_TIMEOUT = 30000;
  * @implements {LH.Gatherer.FRTransitionalDriver}
  */
 class Driver {
-  /** @private */
-  _traceCategories = Driver.traceCategories;
-
   /**
    * @pri_vate (This should be private, but that makes our tests harder).
    * An event emitter that enforces mapping between Crdp event names and payload types.
@@ -84,20 +83,6 @@ class Driver {
    * @type {Map<string, number>}
    */
   _domainEnabledCounts = new Map();
-
-  /**
-   * Used for monitoring url redirects during gotoURL.
-   * @type {?string}
-   * @private
-   */
-  _monitoredUrl = null;
-
-  /**
-   * Used for monitoring frame navigations during gotoURL.
-   * @type {Array<LH.Crdp.Page.Frame>}
-   * @private
-   */
-  _monitoredUrlNavigations = [];
 
   /**
    * @type {number}
@@ -126,8 +111,6 @@ class Driver {
     this.on('Target.attachedToTarget', event => {
       this._handleTargetAttached(event).catch(this._handleEventError);
     });
-
-    this.on('Page.frameNavigated', evt => this._monitoredUrlNavigations.push(evt.frame));
     this.on('Debugger.paused', () => this.sendCommand('Debugger.resume'));
 
     connection.on('protocolevent', this._handleProtocolEvent.bind(this));
@@ -138,71 +121,16 @@ class Driver {
     this.evaluateAsync = this.executionContext.evaluateAsync.bind(this.executionContext);
   }
 
+  /** @deprecated - Not available on Fraggle Rock driver. */
   static get traceCategories() {
-    return [
-      // Exclude default categories. We'll be selective to minimize trace size
-      '-*',
-
-      // Used instead of 'toplevel' in Chrome 71+
-      'disabled-by-default-lighthouse',
-
-      // Used for Cumulative Layout Shift metric
-      'loading',
-
-      // All compile/execute events are captured by parent events in devtools.timeline..
-      // But the v8 category provides some nice context for only <0.5% of the trace size
-      'v8',
-      // Same situation here. This category is there for RunMicrotasks only, but with other teams
-      // accidentally excluding microtasks, we don't want to assume a parent event will always exist
-      'v8.execute',
-
-      // For extracting UserTiming marks/measures
-      'blink.user_timing',
-
-      // Not mandatory but not used much
-      'blink.console',
-
-      // Most of the events we need are from these two categories
-      'devtools.timeline',
-      'disabled-by-default-devtools.timeline',
-
-      // Up to 450 (https://goo.gl/rBfhn4) JPGs added to the trace
-      'disabled-by-default-devtools.screenshot',
-
-      // This doesn't add its own events, but adds a `stackTrace` property to devtools.timeline events
-      'disabled-by-default-devtools.timeline.stack',
-
-      // CPU sampling profiler data only enabled for debugging purposes
-      // 'disabled-by-default-v8.cpu_profiler',
-      // 'disabled-by-default-v8.cpu_profiler.hires',
-    ];
+    return TraceGatherer.getDefaultTraceCategories();
   }
 
   /**
    * @return {Promise<LH.Crdp.Browser.GetVersionResponse & {milestone: number}>}
    */
   async getBrowserVersion() {
-    const status = {msg: 'Getting browser version', id: 'lh:gather:getVersion'};
-    log.time(status, 'verbose');
-    const version = await this.sendCommand('Browser.getVersion');
-    const match = version.product.match(/\/(\d+)/); // eg 'Chrome/71.0.3577.0'
-    const milestone = match ? parseInt(match[1]) : 0;
-    log.timeEnd(status);
-    return Object.assign(version, {milestone});
-  }
-
-  /**
-   * Computes the benchmark index to get a rough estimate of device class.
-   * @return {Promise<number>}
-   */
-  async getBenchmarkIndex() {
-    const status = {msg: 'Benchmarking machine', id: 'lh:gather:getBenchmarkIndex'};
-    log.time(status);
-    const indexVal = await this.executionContext.evaluate(pageFunctions.computeBenchmarkIndex, {
-      args: [],
-    });
-    log.timeEnd(status);
-    return indexVal;
+    return getBrowserVersion(this);
   }
 
   /**
@@ -477,53 +405,6 @@ class Driver {
     return this.sendCommand('Page.addScriptToEvaluateOnLoad', {
       scriptSource,
     });
-  }
-
-  /**
-   * @return {Promise<{url: string, data: string}|null>}
-   */
-  async getAppManifest() {
-    // In all environments but LR, Page.getAppManifest finishes very quickly.
-    // In LR, there is a bug that causes this command to hang until outgoing
-    // requests finish. This has been seen in long polling (where it will never
-    // return) and when other requests take a long time to finish. We allow 10 seconds
-    // for outgoing requests to finish. Anything more, and we continue the run without
-    // a manifest.
-    // Googlers, see: http://b/124008171
-    this.setNextProtocolTimeout(10000);
-    let response;
-    try {
-      response = await this.sendCommand('Page.getAppManifest');
-    } catch (err) {
-      if (err.code === 'PROTOCOL_TIMEOUT') {
-        // LR will timeout fetching the app manifest in some cases, move on without one.
-        // https://github.com/GoogleChrome/lighthouse/issues/7147#issuecomment-461210921
-        log.error('Driver', 'Failed fetching manifest', err);
-        return null;
-      }
-
-      throw err;
-    }
-
-    let data = response.data;
-
-    // We're not reading `response.errors` however it may contain critical and noncritical
-    // errors from Blink's manifest parser:
-    //   https://chromedevtools.github.io/debugger-protocol-viewer/tot/Page/#type-AppManifestError
-    if (!data) {
-      // If the data is empty, the page had no manifest.
-      return null;
-    }
-
-    const BOM_LENGTH = 3;
-    const BOM_FIRSTCHAR = 65279;
-    const isBomEncoded = data.charCodeAt(0) === BOM_FIRSTCHAR;
-
-    if (isBomEncoded) {
-      data = Buffer.from(data).slice(BOM_LENGTH).toString();
-    }
-
-    return {...response, data};
   }
 
   /**
@@ -816,15 +697,7 @@ class Driver {
   async beginTrace(settings) {
     const additionalCategories = (settings && settings.additionalTraceCategories &&
         settings.additionalTraceCategories.split(',')) || [];
-    const traceCategories = this._traceCategories.concat(additionalCategories);
-
-    // In Chrome <71, gotta use the chatty 'toplevel' cat instead of our own.
-    // TODO(COMPAT): Once m71 ships to stable, drop this section
-    const milestone = (await this.getBrowserVersion()).milestone;
-    if (milestone < 71) {
-      const toplevelIndex = traceCategories.indexOf('disabled-by-default-lighthouse');
-      traceCategories[toplevelIndex] = 'toplevel';
-    }
+    const traceCategories = TraceGatherer.getDefaultTraceCategories().concat(additionalCategories);
 
     const uniqueCategories = Array.from(new Set(traceCategories));
 
@@ -848,26 +721,7 @@ class Driver {
    * @return {Promise<LH.Trace>}
    */
   endTrace() {
-    /** @type {Array<LH.TraceEvent>} */
-    const traceEvents = [];
-
-    /**
-     * Listener for when dataCollected events fire for each trace chunk
-     * @param {LH.Crdp.Tracing.DataCollectedEvent} data
-     */
-    const dataListener = function(data) {
-      traceEvents.push(...data.value);
-    };
-    this.on('Tracing.dataCollected', dataListener);
-
-    return new Promise((resolve, reject) => {
-      this.once('Tracing.tracingComplete', _ => {
-        this.off('Tracing.dataCollected', dataListener);
-        resolve({traceEvents});
-      });
-
-      this.sendCommand('Tracing.end').catch(reject);
-    });
+    return TraceGatherer.endTraceAndCollectEvents(this.defaultSession);
   }
 
   /**
@@ -933,26 +787,6 @@ class Driver {
         emulation.clearAllNetworkEmulation(this);
 
     await Promise.all([cpuPromise, networkPromise]);
-  }
-
-  /**
-   * Emulate internet disconnection.
-   * @return {Promise<void>}
-   */
-  async goOffline() {
-    await this.sendCommand('Network.enable');
-    await emulation.goOffline(this);
-    this.online = false;
-  }
-
-  /**
-   * Enable internet connection, using emulated mobile settings if applicable.
-   * @param {{settings: LH.Config.Settings, passConfig: LH.Config.Pass}} options
-   * @return {Promise<void>}
-   */
-  async goOnline(options) {
-    await this.setThrottling(options.settings, options.passConfig);
-    this.online = true;
   }
 
   /**
