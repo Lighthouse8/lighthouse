@@ -11,6 +11,11 @@
  */
 module.exports = [
   {
+    networkRequests: {
+      // 8 requests made for normal page testing.
+      // 1 extra request made because stylesheets are evicted from the cache by the time DT opens.
+      length: 9,
+    },
     lhr: {
       requestedUrl: 'http://localhost:10200/preload.html',
       finalUrl: 'http://localhost:10200/preload.html',
@@ -19,9 +24,6 @@ module.exports = [
           score: '>=0.80', // primarily just making sure it didn't fail/go crazy, specific value isn't that important
         },
         'first-meaningful-paint': {
-          score: '>=0.90', // primarily just making sure it didn't fail/go crazy, specific value isn't that important
-        },
-        'first-cpu-idle': {
           score: '>=0.90', // primarily just making sure it didn't fail/go crazy, specific value isn't that important
         },
         'interactive': {
@@ -62,6 +64,9 @@ module.exports = [
     },
   },
   {
+    networkRequests: {
+      length: 8,
+    },
     lhr: {
       requestedUrl: 'http://localhost:10200/perf/perf-budgets/load-things.html',
       finalUrl: 'http://localhost:10200/perf/perf-budgets/load-things.html',
@@ -140,6 +145,9 @@ module.exports = [
     },
   },
   {
+    networkRequests: {
+      length: 5,
+    },
     lhr: {
       requestedUrl: 'http://localhost:10200/perf/fonts.html',
       finalUrl: 'http://localhost:10200/perf/fonts.html',
@@ -168,6 +176,9 @@ module.exports = [
     },
   },
   {
+    networkRequests: {
+      length: 3,
+    },
     artifacts: {
       TraceElements: [
         {
@@ -291,6 +302,9 @@ module.exports = [
     },
   },
   {
+    networkRequests: {
+      length: 2,
+    },
     lhr: {
       requestedUrl: 'http://localhost:10200/perf/frame-metrics.html',
       finalUrl: 'http://localhost:10200/perf/frame-metrics.html',
@@ -303,18 +317,17 @@ module.exports = [
               {
                 // Weighted CLS score was added to the trace in m90:
                 // https://bugs.chromium.org/p/chromium/issues/detail?id=1173139
-                _minChromiumMilestone: 90,
+                //
+                // Weighted score on emulated mobile bug fixed in m92:
+                // https://chromium.googlesource.com/chromium/src/+/042fbfb4cc6a675da0dff4bf3fc08622af42422b
+                _minChromiumMilestone: 92,
                 firstContentfulPaint: '>5000',
                 firstContentfulPaintAllFrames: '<5000',
                 largestContentfulPaint: '>5000',
                 largestContentfulPaintAllFrames: '<5000',
-                cumulativeLayoutShift: '0.001 +/- 0.0005',
-                cumulativeLayoutShiftAllFrames: '0.0276 +/- 0.0005',
-                layoutShiftAvgSessionGap5s: '>0',
-                layoutShiftMaxSessionGap1s: '>0',
-                layoutShiftMaxSessionGap1sLimit5s: '>0',
-                layoutShiftMaxSliding1s: '>0',
-                layoutShiftMaxSliding300ms: '>0',
+                cumulativeLayoutShift: '0.197 +/- 0.001',
+                cumulativeLayoutShiftMainFrame: '0.001 +/- 0.0005',
+                totalCumulativeLayoutShift: '0.001 +/- 0.0005',
               },
               {
                 lcpInvalidated: false,

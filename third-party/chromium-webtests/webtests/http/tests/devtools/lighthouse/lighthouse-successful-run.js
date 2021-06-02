@@ -9,9 +9,7 @@
     // metrics
     'first-contentful-paint',
     'first-meaningful-paint',
-    'first-cpu-idle',
     'interactive',
-    'estimated-input-latency',
     'speed-index',
     'metrics',
     'screenshot-thumbnails',
@@ -31,13 +29,13 @@
     'uses-rel-preload',
     'uses-responsive-images',
     'uses-text-compression',
-    'uses-webp-images',
+    'modern-image-formats',
   ];
 
   TestRunner.addResult('Tests that audits panel works.\n');
   await TestRunner.navigatePromise('resources/lighthouse-basic.html');
 
-  await TestRunner.loadModule('lighthouse_test_runner');
+  await TestRunner.loadTestModule('lighthouse_test_runner');
   await TestRunner.showPanel('lighthouse');
 
   // Use all the default settings, but also enable a plugin.

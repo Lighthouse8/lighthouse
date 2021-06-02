@@ -18,9 +18,6 @@ module.exports = [
         'first-contentful-paint': {
           numericValue: '>2000',
         },
-        'first-cpu-idle': {
-          numericValue: '>2000',
-        },
         'interactive': {
           numericValue: '>2000',
         },
@@ -88,8 +85,6 @@ module.exports = [
           details: {
             items: {
               0: {
-                // TODO: Remove when attribution is resolved.
-                _maxChromiumMilestone: 90,
                 url: /main-thread-consumer/,
                 scripting: '>9000',
               },

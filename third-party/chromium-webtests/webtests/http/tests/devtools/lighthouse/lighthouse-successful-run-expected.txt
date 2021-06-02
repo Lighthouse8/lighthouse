@@ -25,8 +25,8 @@ Benchmarking machine
 Initializing…
 Running defaultPass pass
 Resetting state with about:blank
-Setting up network for the pass trace
 Cleaning browser cache
+Preparing network conditions
 Running beforePass methods
 Gathering setup: CSSUsage
 Gathering setup: JsUsage
@@ -89,6 +89,7 @@ Gathering in-page: SourceMaps
 Gathering in-page: FullPageScreenshot
 Gathering trace
 Gathering devtoolsLog & network records
+Computing artifact: NetworkRecords
 Running afterPass methods
 Gathering: CSSUsage
 Gathering: JsUsage
@@ -112,6 +113,7 @@ Gathering: TagsBlockingFirstPaint
 Gathering: FontSize
 Gathering: EmbeddedContent
 Gathering: RobotsTxt
+Getting browser version
 Gathering: TapTargets
 Gathering: Accessibility
 Gathering: TraceElements
@@ -123,7 +125,7 @@ Get webapp manifest
 Collect stacks
 Running offlinePass pass
 Resetting state with about:blank
-Setting up network for the pass trace
+Preparing network conditions
 Running beforePass methods
 Gathering setup: ServiceWorker
 Beginning devtoolsLog and trace
@@ -131,11 +133,12 @@ Loading page & waiting for onload
 Running pass methods
 Gathering in-page: ServiceWorker
 Gathering devtoolsLog & network records
+Computing artifact: NetworkRecords
 Running afterPass methods
 Gathering: ServiceWorker
 Running redirectPass pass
 Resetting state with about:blank
-Setting up network for the pass trace
+Preparing network conditions
 Running beforePass methods
 Gathering setup: HTTPRedirect
 Beginning devtoolsLog and trace
@@ -143,12 +146,12 @@ Loading page & waiting for onload
 Running pass methods
 Gathering in-page: HTTPRedirect
 Gathering devtoolsLog & network records
+Computing artifact: NetworkRecords
 Running afterPass methods
 Gathering: HTTPRedirect
 Disconnecting from browser...
 Analyzing and running audits...
 Auditing: Uses HTTPS
-Computing artifact: NetworkRecords
 Auditing: Redirects HTTP traffic to HTTPS
 Auditing: Registers a service worker that controls page and `start_url`
 Auditing: Has a `<meta name="viewport">` tag with `width` or `initial-scale`
@@ -173,9 +176,6 @@ Computing artifact: Speedline
 Auditing: Screenshot Thumbnails
 Auditing: Final Screenshot
 Computing artifact: Screenshots
-Auditing: Estimated Input Latency
-Computing artifact: EstimatedInputLatency
-Computing artifact: LanternEstimatedInputLatency
 Auditing: Total Blocking Time
 Computing artifact: TotalBlockingTime
 Computing artifact: LanternTotalBlockingTime
@@ -188,9 +188,6 @@ Computing artifact: CumulativeLayoutShift
 Auditing: No browser errors logged to the console
 Auditing: Initial server response time was short
 Computing artifact: MainResource
-Auditing: First CPU Idle
-Computing artifact: FirstCPUIdle
-Computing artifact: LanternFirstCPUIdle
 Auditing: Time to Interactive
 Computing artifact: Interactive
 Auditing: User Timing marks and measures
@@ -241,7 +238,11 @@ Auditing: Page has valid source maps
 Auditing: Preload Largest Contentful Paint image
 Computing artifact: LanternLargestContentfulPaint
 Computing artifact: LanternFirstContentfulPaint
+Auditing: Ensure CSP is effective against XSS attacks
 Auditing: Full-page screenshot
+Auditing: Script Treemap Data
+Computing artifact: JSBundles
+Computing artifact: ModuleDuplication
 Auditing: Site works cross-browser
 Auditing: Page transitions don't feel like they block on the network
 Auditing: Each page has a URL
@@ -308,8 +309,8 @@ Computing artifact: FirstContentfulPaint
 Computing artifact: LanternFirstContentfulPaint
 Auditing: Minify CSS
 Auditing: Minify JavaScript
-Auditing: Remove unused CSS
-Auditing: Remove unused JavaScript
+Auditing: Reduce unused CSS
+Auditing: Reduce unused JavaScript
 Computing artifact: JSBundles
 Auditing: Serve images in next-gen formats
 Auditing: Efficiently encode images
@@ -375,11 +376,13 @@ Computing artifact: TagLoadTime
 Computing artifact: LanternTagLoadTime
 Auditing: Ad density is within recommended range
 Auditing: Cumulative ad shift
+Auditing: Deprecated GPT API Usage
+Auditing: GPT Errors
 Generating results...
 
 =============== Lighthouse Results ===============
 URL: http://127.0.0.1:8000/devtools/lighthouse/resources/lighthouse-basic.html
-Version: 7.3.0
+Version: 8.0.0
 ViewportDimensions: {
   "innerWidth": 980,
   "innerHeight": 1743,
@@ -427,11 +430,13 @@ color-contrast: pass
 content-width: fail
 crawlable-anchors: pass
 critical-request-chains: informative
+csp-xss: informative
 cumulative-ad-shift: notApplicable
 cumulative-layout-shift: numeric
 custom-controls-labels: manual
 custom-controls-roles: manual
 definition-list: notApplicable
+deprecated-gpt-api-usage: informative
 deprecations: pass
 diagnostics: informative
 dlitem: notApplicable
@@ -444,12 +449,10 @@ duplicate-tags: notApplicable
 duplicated-javascript: numeric
 efficient-animated-content: flaky
 errors-in-console: pass
-estimated-input-latency: flaky
 external-anchors-use-rel-noopener: pass
 final-screenshot: ERROR Chrome didn't collect any screenshots during the page load. Please make sure there is content visible on the page, and then try re-running Lighthouse. (NO_SCREENSHOTS)
 first-ad-render: notApplicable
 first-contentful-paint: flaky
-first-cpu-idle: flaky
 first-meaningful-paint: flaky
 focus-traps: manual
 focusable-controls: manual
@@ -460,6 +463,7 @@ frame-title: notApplicable
 full-page-screenshot: informative
 geolocation-on-start: pass
 gpt-bids-parallel: notApplicable
+gpt-errors-overall: informative
 heading-order: notApplicable
 hreflang: pass
 html-has-lang: fail
@@ -498,6 +502,7 @@ meta-description: fail
 meta-refresh: notApplicable
 meta-viewport: notApplicable
 metrics: flaky
+modern-image-formats: flaky
 network-requests: informative
 network-rtt: informative
 network-server-latency: informative
@@ -524,6 +529,7 @@ resource-summary: informative
 robots-txt: notApplicable
 screenshot-thumbnails: flaky
 script-injected-tags: notApplicable
+script-treemap-data: informative
 serial-header-bidding: notApplicable
 server-response-time: pass
 service-worker: fail
@@ -556,7 +562,6 @@ uses-rel-preconnect: numeric
 uses-rel-preload: flaky
 uses-responsive-images: flaky
 uses-text-compression: flaky
-uses-webp-images: flaky
 valid-lang: notApplicable
 valid-source-maps: pass
 video-caption: notApplicable
@@ -564,7 +569,7 @@ viewport: fail
 viewport-ad-density: notApplicable
 visual-order-follows-dom: manual
 
-# of .lh-audit divs: 156
+# of .lh-audit divs: 159
 
 .lh-audit divs:
 accesskeys
@@ -605,10 +610,12 @@ color-contrast
 content-width
 crawlable-anchors
 critical-request-chains
+csp-xss
 cumulative-ad-shift
 custom-controls-labels
 custom-controls-roles
 definition-list
+deprecated-gpt-api-usage
 deprecations
 dlitem
 doctype
@@ -631,6 +638,7 @@ form-field-multiple-labels
 frame-title
 geolocation-on-start
 gpt-bids-parallel
+gpt-errors-overall
 heading-order
 hreflang
 html-has-lang
@@ -665,6 +673,7 @@ maskable-icon
 meta-description
 meta-refresh
 meta-viewport
+modern-image-formats
 no-document-write
 no-unload-listeners
 no-vulnerable-libraries
@@ -715,7 +724,6 @@ uses-rel-preconnect
 uses-rel-preload
 uses-responsive-images
 uses-text-compression
-uses-webp-images
 valid-lang
 valid-source-maps
 video-caption
