@@ -9,6 +9,7 @@ fi
 git remote add upstream https://github.com/GoogleChrome/lighthouse.git || true
 git fetch upstream
 git switch lightkeeper
+git pull
 git merge $1
 git push
 yarn
