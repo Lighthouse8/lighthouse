@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 if [ -z "$1" ]
   then
     echo "Missing version. Expects a tag, e.g. './update-lightkeeper.sh v9.6.6'"
@@ -10,10 +12,11 @@ git remote add upstream https://github.com/GoogleChrome/lighthouse.git || true
 git fetch upstream
 git switch lightkeeper
 git pull
-git merge $1
-git push
+git checkout --detach
+git rebase --onto $1 cbabcf4217dfa5da6ad083f666fcd074c18a00c9~1
 yarn
-yarn build-viewer
+yarn build-all
 shopt -s extglob
 rm -rf -- ../lightkeeper/frontend/lighthouse/viewer/!(README.md)
 mv dist/gh-pages/viewer/* ../lightkeeper/frontend/lighthouse/viewer/
+git switch lightkeeper
