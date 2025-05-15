@@ -14,8 +14,8 @@ git switch lightkeeper
 git pull
 git checkout --detach
 git rebase --onto $1 cbabcf4217dfa5da6ad083f666fcd074c18a00c9~1
-yarn
-yarn build-all
+sudo yarn
+sudo yarn build-all
 shopt -s extglob
 rm -rf -- ../lightkeeper/frontend/lighthouse/viewer/!(README.md)
 mv dist/gh-pages/viewer/* ../lightkeeper/frontend/lighthouse/viewer/
